@@ -1,0 +1,546 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/numiscloud/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  FREE
+  SUBSCRIBER
+  MODERATOR
+  ADMIN
+}
+
+enum PieceType {
+  MONEDA
+  BILLETE
+  MEDALLA
+  FICHA
+  TOKEN
+  CONDECORACION
+  OTRA
+}
+
+enum PieceStatus {
+  EN_COLECCION
+  VENDIDA
+  CEDIDA
+  ROBADA
+  EXTRAVIADA
+}
+
+enum PieceVisibility {
+  PRIVADA
+  PUBLICA
+  COMPARTIDA
+}
+
+enum ConservationGrade {
+  PR
+  FR
+  G
+  VG
+  F
+  VF
+  EF
+  AU
+  UNC
+  BU
+  FDC
+  PROOF
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  CONTACTS
+  PRIVATE
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum NotificationType {
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  PIECE_LIKE
+  PIECE_COMMENT
+  FORUM_REPLY
+  NEW_MESSAGE
+  SYSTEM
+}
+
+model User {
+  id                String            @id @default(cuid())
+  name              String?
+  email             String            @unique
+  emailVerified     DateTime?
+  image             String?
+  password          String?
+  role              UserRole          @default(FREE)
+  country           String?
+  preferences       Json?
+  stripeCustomerId  String?
+  trialEndsAt       DateTime?
+  bio               String?           @db.Text
+  specialty         String?
+  instagram         String?
+  twitter           String?
+  youtube           String?
+  website           String?
+  profileVisibility ProfileVisibility @default(CONTACTS)
+  termsAcceptedAt   DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  pieces        Piece[]
+  albums        Album[]
+  tags          Tag[]
+  chatMessages  ChatMessage[]
+  subscription  Subscription?
+  newsArticles  NewsArticle[]
+  stolenReports StolenReport[]
+  sentFriendships     Friendship[]   @relation("sentFriendships")
+  receivedFriendships Friendship[]   @relation("receivedFriendships")
+  forumTopics         ForumTopic[]
+  forumReplies        ForumReply[]
+  pieceLikes          PieceLike[]
+  pieceComments       PieceComment[]
+  notifications       Notification[] @relation("userNotifications")
+  relatedNotifications Notification[] @relation("relatedNotifications")
+  conversationMembers ConversationMember[]
+  sentMessages        Message[]
+  favorites           Favorite[]
+
+  @@index([email])
+  @@index([role])
+  @@index([name])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Album {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pieces Piece[]
+
+  @@index([userId])
+}
+
+model Tag {
+  id     String  @id @default(cuid())
+  name   String
+  color  String?
+  userId String
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pieces PieceTag[]
+
+  @@unique([name, userId])
+  @@index([userId])
+}
+
+model Piece {
+  id                String            @id @default(cuid())
+  title             String
+  type              PieceType         @default(MONEDA)
+  country           String?
+  historicalPeriod  String?
+  year              Int?
+  yearEnd           Int?
+  mint              String?
+  faceValue         String?
+  metal             String?
+  weight            Float?
+  diameter          Float?
+  thickness         Float?
+  conservationGrade ConservationGrade?
+  rarity            String?
+  mintage           Int?
+  catalogReference  String?
+  provenance        String?
+  acquisitionDate   DateTime?
+  acquisitionPrice  Float?
+  estimatedValue    Float?
+  physicalLocation  String?
+  observations      String?           @db.Text
+  status            PieceStatus       @default(EN_COLECCION)
+  visibility        PieceVisibility   @default(PRIVADA)
+  shareToken        String?           @unique
+  userId            String
+  albumId           String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  album    Album?         @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  images   PieceImage[]
+  tags     PieceTag[]
+  likes     PieceLike[]
+  comments  PieceComment[]
+  favorites Favorite[]
+
+  @@index([userId])
+  @@index([visibility])
+  @@index([userId, type])
+  @@index([userId, country])
+  @@index([userId, status])
+  @@index([year])
+  @@index([createdAt])
+}
+
+model PieceImage {
+  id               String  @id @default(cuid())
+  pieceId          String
+  cloudStoragePath String
+  isPublic         Boolean @default(false)
+  imageType        String  @default("additional") // obverse, reverse, additional
+  sortOrder        Int     @default(0)
+  createdAt        DateTime @default(now())
+
+  piece Piece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@index([pieceId])
+}
+
+model PieceTag {
+  id      String @id @default(cuid())
+  pieceId String
+  tagId   String
+
+  piece Piece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([pieceId, tagId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String   // user, assistant
+  content   String   @db.Text
+  pieceId   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  stripeCurrentPeriodEnd DateTime?
+  plan                 String?   // monthly, annual
+  status               String    @default("inactive") // active, inactive, cancelled, past_due
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([stripeSubscriptionId])
+}
+
+model NewsArticle {
+  id        String   @id @default(cuid())
+  title     String
+  summary   String
+  content   String   @db.Text
+  imageUrl  String?
+  category  String?
+  published Boolean  @default(false)
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([published, createdAt])
+  @@index([authorId])
+}
+
+model StolenReport {
+  id           String    @id @default(cuid())
+  title        String
+  description  String    @db.Text
+  type         PieceType @default(MONEDA)
+  country      String?
+  year         Int?
+  metal        String?
+  imageUrl     String?
+  contactEmail String
+  contactPhone String?
+  location     String?
+  dateStolen   DateTime?
+  policeReport String?
+  status       String    @default("pending")
+  userId       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  description String?   @db.Text
+  location    String
+  city        String?
+  country     String?
+  startDate   DateTime
+  endDate     DateTime?
+  url         String?
+  organizer   String?
+  featured    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([startDate])
+  @@index([featured])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([read])
+  @@index([createdAt])
+}
+
+// ============== SOCIAL MODELS ==============
+
+model Friendship {
+  id         String           @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     FriendshipStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  sender   User @relation("sentFriendships", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("receivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+  @@index([senderId, status])
+}
+
+model ForumCategory {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  description String?
+  icon        String?
+  sortOrder   Int          @default(0)
+  topics      ForumTopic[]
+
+  @@index([slug])
+  @@index([sortOrder])
+}
+
+model ForumTopic {
+  id         String   @id @default(cuid())
+  title      String
+  content    String   @db.Text
+  categoryId String
+  authorId   String
+  pinned     Boolean  @default(false)
+  closed     Boolean  @default(false)
+  isOfficial Boolean  @default(false)
+  views      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category ForumCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  author   User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  replies  ForumReply[]
+
+  @@index([categoryId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([pinned])
+}
+
+model ForumReply {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  topicId   String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topic  ForumTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  author User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+  @@index([authorId])
+}
+
+model PieceLike {
+  id        String   @id @default(cuid())
+  userId    String
+  pieceId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  piece Piece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pieceId])
+  @@index([pieceId])
+}
+
+model PieceComment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  pieceId   String
+  userId    String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  piece   Piece          @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  PieceComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies PieceComment[] @relation("CommentReplies")
+
+  @@index([pieceId])
+  @@index([userId])
+}
+
+model Notification {
+  id            String           @id @default(cuid())
+  userId        String
+  type          NotificationType
+  title         String
+  message       String
+  link          String?
+  read          Boolean          @default(false)
+  relatedUserId String?
+  createdAt     DateTime         @default(now())
+
+  user        User  @relation("userNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  relatedUser User? @relation("relatedNotifications", fields: [relatedUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+// ============== MESSAGING MODELS ==============
+
+model Conversation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([updatedAt])
+}
+
+model ConversationMember {
+  id             String   @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String   @db.Text
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+// ============== FAVORITES MODEL ==============
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  pieceId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  piece Piece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pieceId])
+  @@index([userId])
+  @@index([pieceId])
+}
